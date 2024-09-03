@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+
+        <Button
+            android:id="@+id/startButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="32"
+            android:text="Start Camera" />
+
+        <Spinner
+            android:id="@+id/resolutionSpinner"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="12"
+            android:layout_marginStart="8dp" />
+
+        <Spinner
+            android:id="@+id/cameraSelectorSpinner"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="6"
+            android:layout_marginStart="8dp" />
+
+        <TextView
+            android:id="@+id/uriDisplay"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textSize="18sp"
+            android:textColor= "#FFFFFF"
+            android:layout_marginTop="0dp"
+            android:gravity="center_vertical"
+            android:layout_weight="15"
+            android:textIsSelectable="false"/>
+
+        <EditText
+            android:id="@+id/portInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="35"
+            android:hint="8080"
+            android:text="8080"
+            android:inputType="number" />
+
+
+    </LinearLayout>
+
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/showNetworkStreamButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Show Network Stream" />
+
+        <EditText
+            android:id="@+id/networkStreamUrlInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="http://192.168.12.1:8080/camaigo"
+            android:text="http://192.168.12.1:8080/camaigo"
+            android:inputType="textUri" />
+
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/contentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+
+        <ImageView
+            android:id="@+id/imageView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/camaigo"
+            android:layout_centerInParent="true"
+            android:visibility="visible" /> <!-- Initially hidden -->
+
+        <TextureView
+            android:id="@+id/textureView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+
+        <WebView
+            android:id="@+id/webView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layerType="hardware"
+            android:visibility="gone" />
+
+
+    </FrameLayout>
+</LinearLayout>

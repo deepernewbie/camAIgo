@@ -1,0 +1,18 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.camAIgo" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="colorPrimary">#678d91</item>
+        <item name="colorOnPrimary">#d9d9d9</item>
+        <item name="colorSecondary">#2962FF</item>
+        <item name="colorOnSecondary">#d9d9d9</item>
+        <item name="android:colorBackground">@color/background</item>
+        <item name="colorOnBackground">#212121</item>
+
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
+    </style>
+
+    <color name="background">#0f0f0f</color>
+
+    <style name="Theme.camAIgo" parent="Base.Theme.camAIgo" />
+</resources>
