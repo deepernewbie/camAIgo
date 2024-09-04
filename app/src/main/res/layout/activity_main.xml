@@ -105,6 +105,6 @@
             android:layout_height="match_parent"
             android:layerType="hardware"
             android:visibility="gone" />
-        
+
     </FrameLayout>
 </LinearLayout>
