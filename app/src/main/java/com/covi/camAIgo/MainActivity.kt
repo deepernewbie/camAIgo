@@ -97,7 +97,7 @@ class MainActivity : AppCompatActivity() {
         selectedCameraId?.let { initializeResolutionSpinner(it) }
 
 
-        updateUriDisplay()
+        updateUriDisplay(true)
 
         // Add TextWatcher to portInput
         portInput.addTextChangedListener(object : TextWatcher {
@@ -226,7 +226,7 @@ class MainActivity : AppCompatActivity() {
         return "Not connected to Wi-Fi"
     }
 
-    private fun updateUriDisplay() {
+    private fun updateUriDisplay(changeall: Boolean = false) {
         val ipAddress = getDeviceIpAddress()
 
         val uri = if (ipAddress != "Not connected to Wi-Fi") {
@@ -235,6 +235,15 @@ class MainActivity : AppCompatActivity() {
             ipAddress // Just display the "Not connected to Wi-Fi" message
         }
         uriDisplay.text = uri
+
+        if (uri != "Not connected to Wi-Fi" && changeall){
+            val parts = ipAddress.split(".")
+            val newIpAddress = parts.dropLast(1).joinToString(".") + ".1"
+            val newUri = "http://$newIpAddress:8080/camaigo"
+            networkStreamUrlInput.setText(newUri)
+        }
+
+
     }
 
     private fun showMainUI() {
