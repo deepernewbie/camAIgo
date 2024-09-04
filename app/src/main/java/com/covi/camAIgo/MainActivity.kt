@@ -478,20 +478,46 @@ class MainActivity : AppCompatActivity() {
         private const val CAMERA_PERMISSION_REQUEST = 100
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 0) {
+            if (isCanWriteSettings(context = this)) {
+                // Permission has been granted, so change the screen brightness
+                Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
+                Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 255)
+            } else {
+                // Permission has been denied, so show an error message
+                Toast.makeText(this, "WRITE_SETTINGS permission is required to change screen brightness", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     fun isCanWriteSettings(context: Context): Boolean {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.System.canWrite(context)
     }
 
     fun requestCanWriteSettings(activity: Activity){
-        if (isCanWriteSettings(context = activity))
-            return //not need
-        try {
+
+        if (isCanWriteSettings(context = activity)) {
+            return // Not needed
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS)
             intent.data = Uri.parse("package:" + activity.packageName)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             activity.startActivityForResult(intent, 0)
-        }catch (e: Exception){
-            Log.e("requestCanWriteSettings","requestCanWriteSettings $e")
         }
+
+
+
+//        if (isCanWriteSettings(context = activity))
+//            return //not need
+//        try {
+//            val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS)
+//            intent.data = Uri.parse("package:" + activity.packageName)
+//            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+//            activity.startActivityForResult(intent, 0)
+//        }catch (e: Exception){
+//            Log.e("requestCanWriteSettings","requestCanWriteSettings $e")
+//        }
     }
 }

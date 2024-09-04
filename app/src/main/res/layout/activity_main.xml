@@ -15,7 +15,7 @@
             android:id="@+id/startButton"
             android:layout_width="10dp"
             android:layout_height="wrap_content"
-            android:layout_weight="51"
+            android:layout_weight="40"
             android:text="Start Camera" />
 
         <TextView
@@ -26,14 +26,14 @@
             android:textColor= "#FFFFFF"
             android:layout_marginTop="0dp"
             android:gravity="center_vertical"
-            android:layout_weight="15"
+            android:layout_weight="20"
             android:textIsSelectable="false"/>
 
         <EditText
             android:id="@+id/portInput"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="9"
+            android:layout_weight="14"
             android:hint="8080"
             android:text="8080"
             android:inputType="number" />
@@ -64,14 +64,14 @@
             android:id="@+id/showNetworkStreamButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_weight="40"
             android:text="Show Network Stream" />
 
         <EditText
             android:id="@+id/networkStreamUrlInput"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_weight="60"
             android:hint="http://192.168.12.1:8080/camaigo"
             android:text="http://192.168.12.1:8080/camaigo"
             android:inputType="textUri" />
