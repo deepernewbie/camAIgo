@@ -1,3 +1,6 @@
+![camAIgo](https://github.com/deepernewbie/camAIgo/blob/6f1e1d65ec7ee66eb14d137f934160699d3da4b5/Screenshots/camAIgoSCR.png)
+
+
 # camAIgo ready, set, GO
 
 A new open-source Android application designed to supercharge your mobile computer vision processing workflows!
