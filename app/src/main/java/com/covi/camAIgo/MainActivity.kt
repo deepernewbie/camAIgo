@@ -344,6 +344,10 @@ class MainActivity : AppCompatActivity() {
         previewRequestBuilder.addTarget(imageReader.surface)
         previewRequestBuilder.set(CaptureRequest.JPEG_QUALITY, 40.toByte())
 
+        // Set the frame duration explicitly (in nanoseconds)
+        val frameDuration = (1_000_000_000 / 20).toLong()
+        previewRequestBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDuration)
+
         cameraDevice.createCaptureSession(listOf(imageReader.surface), object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(session: CameraCaptureSession) {
                 captureSession = session
@@ -355,6 +359,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun processNewImage(reader: ImageReader) {
+        currentImage?.close()
+
         // Acquire the latest image
         currentImage = reader.acquireLatestImage()
         currentImage?.let { image ->
@@ -507,17 +513,5 @@ class MainActivity : AppCompatActivity() {
             activity.startActivityForResult(intent, 0)
         }
 
-
-
-//        if (isCanWriteSettings(context = activity))
-//            return //not need
-//        try {
-//            val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS)
-//            intent.data = Uri.parse("package:" + activity.packageName)
-//            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-//            activity.startActivityForResult(intent, 0)
-//        }catch (e: Exception){
-//            Log.e("requestCanWriteSettings","requestCanWriteSettings $e")
-//        }
     }
 }

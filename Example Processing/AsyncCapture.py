@@ -4,38 +4,51 @@ import urllib.request
 import numpy as np
 
 
-class AsyncCaptureURL(multiprocessing.Process):
-    def __init__(self,cap_str,shrd_mem):
+class DataSegmenter(multiprocessing.Process):
+    def __init__(self,cap_str, last_data):
         super().__init__()
-        self.cap_str = cap_str
-        self.shrd_mem = shrd_mem
-        try:
-            self.stream = urllib.request.urlopen(self.cap_str)
-        except urllib.error.URLError:
-            raise ConnectionRefusedError
-        self.shrd_mem["Frame"] =None
-        self.shrd_mem["Error"] = None
-
+        self.last_data = last_data
+        self.last_data["buffer"]=None
+        self.stream = urllib.request.urlopen(cap_str)
 
     def run(self):
-        total_bytes = b''
-        while not self.shrd_mem["Stop"]:
-            try:
-                new_bytes = self.stream.read(1024)
-                total_bytes += new_bytes
-            except ConnectionResetError:
-                raise ConnectionResetError
+        buffer = b''
+        while True:
+            data = self.stream.read(1024)
+            buffer += data
+            while True:
+                last_boundary = buffer.rfind(b'--image-boundary')
+                first_boundary = buffer[:last_boundary].rfind(b'--image-boundary')
+                if first_boundary != -1 and last_boundary != -1 and first_boundary != last_boundary:
+                    #self.data_list.append(buffer[first_boundary:last_boundary])
+                    self.last_data["buffer"]=buffer[first_boundary:last_boundary]
+                    buffer = buffer[last_boundary:]
+                else:
+                    break
 
-            b = total_bytes.find(b'\xff\xd9')  # JPEG end
-            if not b == -1:
-                a = total_bytes.find(b'\xff\xd8')  # JPEG start
-                jpg = total_bytes[a:b + 2]  # actual image
-                total_bytes = total_bytes[b + 2:]  # other information
+class AsyncCaptureURL(multiprocessing.Process):
+    def __init__(self, cap_str, shrd_mem):
+        super().__init__()
+        self.shrd_mem = shrd_mem
+        self.last_data = multiprocessing.Manager().dict()
+        self.data_segmenter = DataSegmenter(cap_str,self.last_data)
+        self.data_segmenter.start()
+        self.shrd_mem["Frame"] = None
+        self.shrd_mem["Error"] = None
+
+    def run(self):
+        while not self.shrd_mem["Stop"]:
+            buffer=self.last_data["buffer"]
+            if buffer:
+                start = buffer.find(b'\xff\xd8')
+                end = buffer.rfind(b'\xff\xd9')
+                jpg = buffer[start:end + 2]
                 try:
-                    frame = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                    frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
                     self.shrd_mem["Frame"] = frame
                 except cv2.error:
                     pass
+        self.data_segmenter.terminate()
 
 
 

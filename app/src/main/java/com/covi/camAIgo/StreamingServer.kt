@@ -55,7 +55,7 @@ class StreamingServer(private val port: Int = 8080) {
                     sendMJPEGHeader(output)
 
                     while (isRunning.get() && clientRunning.get() && !client.isClosed) {
-                        Thread.sleep(10)
+                        Thread.sleep(50)
                     }
                 }
             } catch (e: SocketException) {
@@ -117,14 +117,16 @@ class StreamingServer(private val port: Int = 8080) {
     }
 
     private fun sendMJPEGFrame(output: OutputStream, jpegBytes: ByteArray) {
+        val time_id  =System.currentTimeMillis()
         val frameHeader = "--image-boundary\r\n" +
                 "Content-Type: image/jpeg\r\n" +
                 "Content-Length: ${jpegBytes.size}\r\n" +
-                "X-Timestamp: ${System.currentTimeMillis()}\r\n" +
+                "X-Timestamp: ${time_id}\r\n" +
                 "X-Resolution: ${frameWidth}x${frameHeight}\r\n\r\n"
         output.write(frameHeader.toByteArray())
         output.write(jpegBytes)
-        output.write("\r\n".toByteArray())
+        output.write("X-Timestamp_end: ${time_id}\r\n".toByteArray())
+        //output.write("\r\n".toByteArray())
         output.flush()
     }
 

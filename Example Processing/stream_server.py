@@ -49,7 +49,7 @@ def main():
         shared_mem["Stop"] = True
         cap.join(timeout=5)
         if cap.is_alive():
-            print("AsyncCapturePipe did not terminate gracefully")
+            print("AsyncCapture did not terminate gracefully")
             cap.terminate()
         server.stop()
         cv2.destroyAllWindows()
