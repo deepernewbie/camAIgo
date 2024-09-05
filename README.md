@@ -16,16 +16,16 @@ any language or platform on your local premises cloud. Capture, stream, process,
 
 
 ```text
-+----------------+                     +----------------+
-| Mobile Device  |                     | Processing     |
-| +----------+   |                     |                |
-| | Camera   |------MJPEG over HTTP -->| Your Favorite  |
-| +----------+   |                     | Language       |
-| +----------+   |                     |                |
-| | Display  |<-----MJPEG over HTTP----| Your Favorite  |
-| +----------+   |                     | Platform       |
-|    camAIgo     |                     |                |
-+----------------+                     +----------------+
++----------------+                             +----------------+
+| Mobile Device  |                             | Processing     |
+| +----------+   |                             |                |
+| | Camera   |------MJPEG over HTTP ---------->| Your Favorite  |
+| +----------+   |                             | Language       |
+| +----------+   |                             |                |
+| | Display  |<-----MJPEG/WEBP over HTTP/WS----| Your Favorite  |
+| +----------+   |                             | Platform       |
+|    camAIgo     |                             |                |
++----------------+                             +----------------+
 ```
  ## Basic Usage and Installation
 
@@ -52,8 +52,9 @@ any language or platform on your local premises cloud. Capture, stream, process,
 6) Run your favorite algorithm on your favorite platform
 
 Dummy Python Example (Receives the device camera stream and streams it back):
-
-    pip install mjpeg-streamer
+    pip install websockets
     python ./Example Processing/server_streamer
 
 7) Press "Show Network Stream"
+   http://<processor_ip>:<port> uses HTTP
+   ws://<processor_ip>:<port> uses WS
