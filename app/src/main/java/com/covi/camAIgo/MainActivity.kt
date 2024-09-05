@@ -283,7 +283,7 @@ class MainActivity : AppCompatActivity() {
             webView.visibility = View.VISIBLE
 
             webView.settings.apply {
-                javaScriptEnabled = false  // Enable JavaScript
+                javaScriptEnabled = true  // Enable JavaScript
                 domStorageEnabled = true  // Enable DOM storage
                 cacheMode = WebSettings.LOAD_NO_CACHE  // Don't cache data
                 mediaPlaybackRequiresUserGesture = false  // Allow autoplay
@@ -317,6 +317,8 @@ class MainActivity : AppCompatActivity() {
             }
 
 
+            val isWebSocket = streamUrl.startsWith("ws://") || streamUrl.startsWith("wss://")
+
             val html = """
             <!DOCTYPE html>
             <html>
@@ -324,14 +326,34 @@ class MainActivity : AppCompatActivity() {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
                 <style>
                     body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: #000; }
-                    img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; }
+                    img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
                 </style>
             </head>
             <body>
-                <img src="$streamUrl" />
+                <img id="streamImage" src="${if (!isWebSocket) streamUrl else ""}" alt="Stream" />
+                ${if (isWebSocket) """
+                <script>
+                    const ws = new WebSocket('$streamUrl');
+                    const img = document.getElementById('streamImage');
+        
+                    ws.onmessage = function(event) {
+                        img.src = 'data:image/webp;base64,' + event.data;
+                    };
+        
+                    ws.onerror = function(error) {
+                        console.error('WebSocket Error:', error);
+                    };
+        
+                    ws.onclose = function() {
+                        console.log('WebSocket connection closed');
+                    };
+                </script>
+                """ else ""}
             </body>
             </html>
-        """.trimIndent()
+            """.trimIndent()
+
+
 
             webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
         } else {

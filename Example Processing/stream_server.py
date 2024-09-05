@@ -1,11 +1,15 @@
-import cv2
-from mjpeg_streamer import MjpegServer, Stream
-from AsyncCapture import AsyncCaptureURL
+from AsyncCapture import *
+from AsyncStream import *
 import multiprocessing
-import time
+
+
+laptop_ip = "192.168.12.1"
+android_device_ip = "http://192.168.12.84:8080/"
+Hout = 360
+Wout = 640
+
 
 def main():
-    android_device_ip = "http://192.168.12.84:8080/"
     shared_mem = multiprocessing.Manager().dict()
     shared_mem["Stop"] = False
 
@@ -19,10 +23,10 @@ def main():
     while shared_mem["Frame"] is None:
         continue
 
-    stream = Stream("camaigo", size=(640, 360), quality=40, fps=20)
-    server = MjpegServer("192.168.12.1", 8080)  #this is the local processing devices ip
-    server.add_stream(stream)
-    server.start()
+    data_share = multiprocessing.Manager().dict()
+    #streamer = AsyncMJPEGWEBPoverHTTP(laptop_ip,(640, 360),40,data_share)
+    streamer = AsyncWEBPoverWS(laptop_ip, (640, 360), 40, data_share)
+    streamer.start()
 
     try:
         while True:
@@ -30,13 +34,16 @@ def main():
             if shared_mem["Stop"]:
                 break
 
-            frame = shared_mem["Frame"]
-            if frame is None:
+            frame_alg_in = shared_mem["Frame"]
+            if frame_alg_in is None:
                 print("Frame not read")
                 continue
 
-            stream.set_frame(frame)
-            cv2.imshow(stream.name, frame)
+            # Your Favorite Algorithm
+            frame_alg_out=frame_alg_in #here some magic happens
+            data_share["Frame"] = (False, frame_alg_out)
+
+            cv2.imshow("Output", frame_alg_out)
 
             if cv2.waitKey(1) == ord("q"):
                 break
@@ -51,7 +58,7 @@ def main():
         if cap.is_alive():
             print("AsyncCapture did not terminate gracefully")
             cap.terminate()
-        server.stop()
+        streamer.terminate()
         cv2.destroyAllWindows()
 
 if __name__ == "__main__":
