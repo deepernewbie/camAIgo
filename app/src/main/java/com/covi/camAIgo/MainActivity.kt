@@ -239,7 +239,7 @@ class MainActivity : AppCompatActivity() {
         if (uri != "Not connected to Wi-Fi" && changeall){
             val parts = ipAddress.split(".")
             val newIpAddress = parts.dropLast(1).joinToString(".") + ".1"
-            val newUri = "http://$newIpAddress:8080/camaigo"
+            val newUri = "http://$newIpAddress:8080"
             networkStreamUrlInput.setText(newUri)
         }
 
