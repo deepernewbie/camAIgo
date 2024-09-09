@@ -4,7 +4,7 @@ import multiprocessing
 
 
 laptop_ip = "192.168.12.1"
-android_device_ip = "http://192.168.12.84:8080/"
+android_device_ip = "http://192.168.12.136:8080/"
 Hout = 360
 Wout = 640
 
@@ -24,14 +24,16 @@ def main():
         continue
 
     data_share = multiprocessing.Manager().dict()
-    #streamer = AsyncMJPEGWEBPoverHTTP(laptop_ip,(640, 360),40,data_share)
-    streamer = AsyncWEBPoverWS(laptop_ip, (640, 360), 40, data_share)
+    #streamer = AsyncMJEPGoverHTTP(laptop_ip,(640, 360),40,data_share)
+    streamer = AsyncMJPEGWEBPoverHTTP(laptop_ip, (Wout, Hout), 40, data_share, format="jpeg") #format="webp" for WEBP and format="jpeg" for MJPEG
+    #streamer = AsyncMJPEGWEBPoverWS(laptop_ip, (Wout, Hout), 40, data_share, format="webp") #format="webp" for WEBP and format="jpeg" for MJPEG
     streamer.start()
 
     try:
         while True:
 
             if shared_mem["Stop"]:
+
                 break
 
             frame_alg_in = shared_mem["Frame"]
@@ -52,6 +54,8 @@ def main():
         print("Interrupted by user")
     except ConnectionResetError:
         print("Server is not running, Stopping...")
+    except urllib.error.URLError:
+        print("Server is not running, check if you have a correct video stream")
     finally:
         shared_mem["Stop"] = True
         cap.join(timeout=5)

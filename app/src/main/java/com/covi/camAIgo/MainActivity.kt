@@ -162,6 +162,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         // Keep the screen on while the app is running
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+
         surfaceView = findViewById(R.id.surfaceView)
         surfaceHolder = surfaceView.holder
         surfaceHolder.addCallback(this)
@@ -406,7 +407,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
                                 } else {
                                     break // Wait for more data
                                 }
-                            }else{
+                            }else {
                                 val remainingBytes = bytesRead - offset
                                 val bytesToRead = minOf(remainingBytes, contentLength - imageData.size())
                                 imageData.write(buffer, offset, bytesToRead)

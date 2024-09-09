@@ -32,19 +32,21 @@ class AsyncMJPEGoverHTTP(multiprocessing.Process):
             server.stop()
 
 class AsyncMJPEGWEBPoverHTTP(multiprocessing.Process):
-    def __init__(self, url,size, quality, shared_dict):
+    def __init__(self, url,size, quality, shared_dict, format="webp"):
         super().__init__()
         self.shared_dict = shared_dict
         self.shared_dict["Frame"]=(True, None)
         self.url = url
         self.size = size
         self.quality = quality
+        self.format = format
 
     def run(self):
         class MJPEGHandler(BaseHTTPRequestHandler):
             def __init__(self, request, client_address, server):
                 self.size = server.size
                 self.quality = server.quality
+                self.format = server.format
                 super().__init__(request, client_address, server)
 
             def do_GET(self):
@@ -59,22 +61,25 @@ class AsyncMJPEGWEBPoverHTTP(multiprocessing.Process):
                         if not sent:
                             # Convert the frame to JPEG format
                             frame = cv2.resize(frame, self.size)
-                            val, frame = cv2.imencode(".webp", frame, [cv2.IMWRITE_WEBP_QUALITY, self.quality])
+                            val, frame = cv2.imencode(".%s"%self.format, frame, [cv2.IMWRITE_WEBP_QUALITY if self.format=="webp" else cv2.IMWRITE_JPEG_QUALITY, self.quality])
                             frame_bytes = frame.tobytes()
 
                             # Prepare the MJPEG frame with boundaries
                             mjpeg_frame = (f"--image-boundary\r\n"
-                                           f"Content-Type: image/webp\r\n"
+                                           f"Content-Type: image/{self.format}\r\n"
                                            f"Content-Length: {len(frame_bytes)}\r\n"
                                            f"X-Resolution: {self.size[0]}x{self.size[1]}\r\n\r\n"
                                            ).encode('utf-8') + frame_bytes + b"\r\n"
 
-                            # Send the MJPEG frame to the client
-                            self.wfile.write(mjpeg_frame)
 
                             # Mark the frame as sent
                             self.server.shared_dict['Frame'] = (True, None)
 
+                            # Send the MJPEG frame to the client
+                            try:
+                                self.wfile.write(mjpeg_frame)
+                            except ConnectionResetError:
+                                break
                         time.sleep(1/20)
 
 
@@ -84,17 +89,19 @@ class AsyncMJPEGWEBPoverHTTP(multiprocessing.Process):
         httpd.boundary = "image-boundary"
         httpd.size = self.size
         httpd.quality = self.quality
+        httpd.format = self.format
         print("Starting server on port 8080")
         httpd.serve_forever()
 
-class AsyncWEBPoverWS(multiprocessing.Process):
-    def __init__(self, url, size, quality, shared_dict):
+class AsyncMJPEGWEBPoverWS(multiprocessing.Process):
+    def __init__(self, url, size, quality, shared_dict, format="webp"):
         super().__init__()
         self.shared_dict = shared_dict
         self.shared_dict["Frame"] = (True, None)
         self.url = url
         self.size = size
         self.quality = quality
+        self.format = format
 
     async def send_frame(self, websocket, path):
         while True:
@@ -103,14 +110,20 @@ class AsyncWEBPoverWS(multiprocessing.Process):
             if not sent:
                 # Convert the frame to WEBP format
                 frame = cv2.resize(frame, self.size)
-                val, frame = cv2.imencode(".webp", frame, [cv2.IMWRITE_WEBP_QUALITY, self.quality])
-                frame_bytes = base64.b64encode(frame).decode('utf-8')
+                val, frame = cv2.imencode(".%s" % self.format, frame, [
+                    cv2.IMWRITE_WEBP_QUALITY if self.format == "webp" else cv2.IMWRITE_JPEG_QUALITY, self.quality])
+
+                frame_bytes = base64.b64encode(frame).decode('utf-8') if self.format == "webp" else frame.tobytes()
 
                 # Mark the frame as sent
                 self.shared_dict['Frame'] = (True, None)
 
                 # Send the frame over WebSocket
-                await websocket.send(frame_bytes)
+                try:
+                    await websocket.send(frame_bytes)
+                except websockets.exceptions.ConnectionClosedOK:
+                    continue
+
 
             await asyncio.sleep(1/20)
 
