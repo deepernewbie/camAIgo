@@ -33,16 +33,57 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
 import android.util.Size
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.TextView
 
-class MainActivity : AppCompatActivity() {
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Rect
+import android.view.SurfaceHolder
+import android.view.SurfaceView
+import kotlinx.coroutines.*
+import java.net.HttpURLConnection
+import java.net.URL
+import org.java_websocket.client.WebSocketClient
+import org.java_websocket.handshake.ServerHandshake
+import java.nio.ByteBuffer
+import android.util.Base64
+import java.io.ByteArrayOutputStream
+import java.net.URI
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.io.BufferedInputStream
+
+
+
+class FixedSizeConcurrentQueue<T>(private val maxSize: Int) {
+    private val queue = ConcurrentLinkedQueue<T>()
+
+    fun add(item: T) {
+        synchronized(queue) {
+            if (queue.size >= maxSize) {
+                queue.poll()  // Remove the oldest item
+            }
+            queue.add(item)
+        }
+    }
+
+    fun poll(): T? {
+        synchronized(queue) {
+            return queue.poll()
+        }
+    }
+
+    fun clear() {
+        synchronized(queue) {
+            queue.clear()
+        }
+    }
+}
+
+class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
 
     private lateinit var startButton: Button
     private lateinit var textureView: TextureView
@@ -58,7 +99,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var uriDisplay: TextView
     private lateinit var networkStreamUrlInput: EditText
     private lateinit var showNetworkStreamButton: Button
-    private lateinit var webView: WebView
     private lateinit var resolutionSpinner: Spinner
     private lateinit var availableResolutions: List<Size>
     private lateinit var selectedResolution: Size
@@ -72,6 +112,14 @@ class MainActivity : AppCompatActivity() {
     private var currentImage: Image? = null
     private var brightness = 1
     private var isShowingNetworkStream = false
+
+
+    private lateinit var surfaceView: SurfaceView
+    private lateinit var surfaceHolder: SurfaceHolder
+    private var streamJob: Job? = null
+    private var webSocketClient: WebSocketClient? = null
+    private val imageQueue = FixedSizeConcurrentQueue<Bitmap>(1)
+    private var drawJob: Job? = null
 
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -114,9 +162,9 @@ class MainActivity : AppCompatActivity() {
         // Keep the screen on while the app is running
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        webView = findViewById(R.id.webView)
-        webView.settings.javaScriptEnabled = true
-        webView.webViewClient = WebViewClient()
+        surfaceView = findViewById(R.id.surfaceView)
+        surfaceHolder = surfaceView.holder
+        surfaceHolder.addCallback(this)
 
 
         requestCanWriteSettings(this)
@@ -259,8 +307,9 @@ class MainActivity : AppCompatActivity() {
         imageView.visibility = View.VISIBLE
         imageView.setImageResource(R.drawable.camaigo)
         imageView.bringToFront()
-        webView.visibility = View.GONE
-        webView.loadUrl("about:blank")  // Clear the WebView content
+        surfaceView.visibility = View.GONE
+
+        stopDrawing()
 
     }
 
@@ -280,86 +329,198 @@ class MainActivity : AppCompatActivity() {
 
             textureView.visibility = View.GONE
             imageView.visibility = View.INVISIBLE
-            webView.visibility = View.VISIBLE
+            surfaceView.visibility = View.VISIBLE
 
-            webView.settings.apply {
-                javaScriptEnabled = true  // Enable JavaScript
-                domStorageEnabled = true  // Enable DOM storage
-                cacheMode = WebSettings.LOAD_NO_CACHE  // Don't cache data
-                mediaPlaybackRequiresUserGesture = false  // Allow autoplay
-                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW  // Allow mixed content
-                useWideViewPort = true
-                loadWithOverviewMode = true
-                builtInZoomControls = false
-                displayZoomControls = false
-                setSupportZoom(false)
-                // Enable WebView debugging (only for development/testing)
-                WebView.setWebContentsDebuggingEnabled(false)
+            when {
+                streamUrl.startsWith("ws://") || streamUrl.startsWith("wss://") -> startWebSocketStream(streamUrl)
+                else -> startHttpStream(streamUrl)
             }
 
-            // Enable hardware acceleration for the WebView
-            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-            webView.scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
+            startDrawing()
 
-
-            webView.webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    // Inject JavaScript to handle video playback
-                    webView.evaluateJavascript("""
-                    var video = document.querySelector('img');
-                    if (video) {
-                        video.style.objectFit = 'fill';
-                        video.style.width = '100%';
-                        video.style.height = '100%';
-                    }
-                """.trimIndent(), null)
-                }
-            }
-
-
-            val isWebSocket = streamUrl.startsWith("ws://") || streamUrl.startsWith("wss://")
-
-            val html = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-                <style>
-                    body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: #000; }
-                    img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
-                </style>
-            </head>
-            <body>
-                <img id="streamImage" src="${if (!isWebSocket) streamUrl else ""}" alt="Stream" />
-                ${if (isWebSocket) """
-                <script>
-                    const ws = new WebSocket('$streamUrl');
-                    const img = document.getElementById('streamImage');
-        
-                    ws.onmessage = function(event) {
-                        img.src = 'data:image/webp;base64,' + event.data;
-                    };
-        
-                    ws.onerror = function(error) {
-                        console.error('WebSocket Error:', error);
-                    };
-        
-                    ws.onclose = function() {
-                        console.log('WebSocket connection closed');
-                    };
-                </script>
-                """ else ""}
-            </body>
-            </html>
-            """.trimIndent()
-
-
-
-            webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
         } else {
             Toast.makeText(this, "Please enter a valid stream URL", Toast.LENGTH_SHORT).show()
         }
     }
+
+    private fun startDrawing() {
+        drawJob = CoroutineScope(Dispatchers.Default).launch {
+            while (isActive) {
+                val bitmap = imageQueue.poll()
+                if (bitmap != null) {
+                    withContext(Dispatchers.Main) {
+                        drawBitmapOnSurface(bitmap)
+                    }
+                }
+                delay(1)  // Adjust the delay to control the frame rate (e.g., 16ms for ~60 FPS)
+            }
+        }
+    }
+
+    private fun stopDrawing() {
+        drawJob?.cancel()
+        drawJob = null
+    }
+
+    private fun drawBitmapOnSurface(bitmap: Bitmap) {
+        surfaceHolder.lockCanvas()?.let {
+            it.drawBitmap(bitmap, null, Rect(0, 0, surfaceView.width, surfaceView.height), null)
+            surfaceHolder.unlockCanvasAndPost(it)
+        }
+    }
+
+    private fun startHttpStream(streamUrl: String) {
+        streamJob = CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = URL(streamUrl)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.connectTimeout = 5000
+                connection.readTimeout = 5000
+
+                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                    val inputStream = BufferedInputStream(connection.inputStream)
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var imageData = ByteArrayOutputStream()
+                    var isReadingImage = false
+                    var contentLength = -1
+
+                    while (isActive) {
+                        bytesRead = inputStream.read(buffer)
+                        if (bytesRead == -1) break
+
+                        var offset = 0
+                        while (offset < bytesRead) {
+                            if (!isReadingImage) {
+                                // Look for the start of an image
+                                val headerEnd = findSequence(buffer, "\r\n\r\n".toByteArray(), offset, bytesRead)
+                                if (headerEnd != -1) {
+                                    // Parse headers
+                                    val headers = String(buffer, offset, headerEnd - offset)
+                                    val lengthMatch = "Content-Length: (\\d+)".toRegex().find(headers)
+                                    contentLength = lengthMatch?.groupValues?.get(1)?.toIntOrNull() ?: -1
+
+                                    isReadingImage = true
+                                    offset = headerEnd + 4 // Skip the empty line after headers
+                                    imageData = ByteArrayOutputStream()
+                                } else {
+                                    break // Wait for more data
+                                }
+                            }else{
+                                val remainingBytes = bytesRead - offset
+                                val bytesToRead = minOf(remainingBytes, contentLength - imageData.size())
+                                imageData.write(buffer, offset, bytesToRead)
+                                offset += bytesToRead
+
+                                if (imageData.size() == contentLength) {
+                                    // We have a complete image
+                                    val bitmap = BitmapFactory.decodeByteArray(imageData.toByteArray(), 0, imageData.size())
+                                    if (bitmap != null) {
+                                        imageQueue.add(bitmap)
+                                    }
+                                    isReadingImage = false
+                                    contentLength = -1
+                                }
+                            }
+                        }
+                    }
+                    inputStream.close()
+                }
+                connection.disconnect()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                delay(1000) // Retry after delay on failure
+            }
+        }
+    }
+
+    // Helper function to find a byte sequence in a ByteArray
+    private fun findSequence(source: ByteArray, sequence: ByteArray, startIndex: Int, endIndex: Int): Int {
+        for (i in startIndex until endIndex - sequence.size + 1) {
+            var found = true
+            for (j in sequence.indices) {
+                if (source[i + j] != sequence[j]) {
+                    found = false
+                    break
+                }
+            }
+            if (found) return i
+        }
+        return -1
+    }
+
+    private fun startWebSocketStream(streamUrl: String) {
+        webSocketClient = object : WebSocketClient(URI(streamUrl)) {
+            override fun onOpen(handshakedata: ServerHandshake?) {
+                Log.d("WebSocket", "Connection opened")
+            }
+
+            override fun onMessage(message: String?) {
+                Log.d("WebSocket", "Received string message: ${message?.take(100)}")
+                message?.let {
+                    if (it.startsWith("UklGR")) {  // This is the base64 prefix for WebP images
+                        try {
+                            val imageBytes = Base64.decode(it, Base64.DEFAULT)
+                            val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                            if (bitmap != null) {
+                                imageQueue.add(bitmap)
+                            } else {
+                                Log.e("WebSocket", "Failed to decode WebP image")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("WebSocket", "Error decoding image: ${e.message}")
+                        }
+                    } else {
+                        Log.d("WebSocket", "Received non-image string message")
+                    }
+                }
+            }
+
+            override fun onMessage(bytes: ByteBuffer?) {
+                Log.d("WebSocket", "Received binary message of size: ${bytes?.remaining()}")
+                bytes?.let {
+                    val imageBytes = ByteArray(it.remaining())
+                    it.get(imageBytes)
+                    val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                    if (bitmap != null) {
+                        imageQueue.add(bitmap)
+                    } else {
+                        Log.e("WebSocket", "Failed to decode binary message as bitmap")
+                    }
+                }
+            }
+
+            override fun onClose(code: Int, reason: String?, remote: Boolean) {
+                Log.d("WebSocket", "Connection closed")
+            }
+
+            override fun onError(ex: Exception?) {
+                Log.e("WebSocket", "Error: ${ex?.message}")
+            }
+        }
+        webSocketClient?.connect()
+    }
+
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        // Surface is created, we can start drawing
+    }
+
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        // Handle surface size changes if needed
+    }
+
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+        // Stop any ongoing streaming when the surface is destroyed
+        stopStreaming()
+    }
+
+    private fun stopStreaming() {
+        streamJob?.cancel()
+        webSocketClient?.close()
+        webSocketClient = null
+    }
+
+
 
     private fun createCameraPreviewSession() {
         val previewRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
@@ -489,7 +650,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        webView.destroy()
+        //webView.destroy()
+        stopStreaming()
         stopCamera()  // Ensure camera is fully stopped
         Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, brightness)
     }

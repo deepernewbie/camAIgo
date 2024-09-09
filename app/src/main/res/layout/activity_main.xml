@@ -99,8 +99,8 @@
             android:layout_height="match_parent" />
 
 
-        <WebView
-            android:id="@+id/webView"
+        <SurfaceView
+            android:id="@+id/surfaceView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layerType="hardware"
