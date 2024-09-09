@@ -41,7 +41,8 @@ any language or platform on your local premises cloud. Capture, stream, process,
 
 2) Install camAIgo.apk in 
 
- [camAIgo](https://github.com/deepernewbie/camAIgo/blob/main/app/release/camAIgo.apk)
+ [camAIgo](https://github.com/deepernewbie/camAIgo/blob/211babf1da74b76ffd24c34743b5298a27d1dcbc/app/release/camAIgo.apk)
+
 
 3) Connect the mobile device to the created wifi AP
 
