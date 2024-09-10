@@ -23,10 +23,11 @@ def main():
     while shared_mem["Frame"] is None:
         continue
 
+    lock = multiprocessing.Lock()
     data_share = multiprocessing.Manager().dict()
     #streamer = AsyncMJEPGoverHTTP(laptop_ip,(640, 360),40,data_share)
-    streamer = AsyncMJPEGWEBPoverHTTP(laptop_ip, (Wout, Hout), 40, data_share, format="jpeg") #format="webp" for WEBP and format="jpeg" for MJPEG
-    #streamer = AsyncMJPEGWEBPoverWS(laptop_ip, (Wout, Hout), 40, data_share, format="webp") #format="webp" for WEBP and format="jpeg" for MJPEG
+    streamer = AsyncMJPEGWEBPoverHTTP(laptop_ip, (Wout, Hout), 40, data_share, lock, format="jpeg") #format="webp" for WEBP and format="jpeg" for MJPEG
+    #streamer = AsyncMJPEGWEBPoverWS(laptop_ip, (Wout, Hout), 40, data_share, lock, format="webp") #format="webp" for WEBP and format="jpeg" for MJPEG
     streamer.start()
 
     try:
@@ -43,7 +44,8 @@ def main():
 
             # Your Favorite Algorithm
             frame_alg_out=frame_alg_in #here some magic happens
-            data_share["Frame"] = (False, frame_alg_out)
+            with lock:
+                data_share["Frame"] = (False, frame_alg_out)
 
             cv2.imshow("Output", frame_alg_out)
 

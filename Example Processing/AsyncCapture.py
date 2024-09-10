@@ -104,15 +104,12 @@ class DataSegmenter(multiprocessing.Process):
             except ConnectionResetError:
                 raise ConnectionResetError
             buffer += data
-            while True:
-                last_boundary = buffer.rfind(b'--image-boundary')
-                first_boundary = buffer[:last_boundary].rfind(b'--image-boundary')
-                if first_boundary != -1 and last_boundary != -1 and first_boundary != last_boundary:
-                    #self.data_list.append(buffer[first_boundary:last_boundary])
-                    self.last_data["buffer"]=buffer[first_boundary:last_boundary]
-                    buffer = buffer[last_boundary:]
-                else:
-                    break
+            last_boundary = buffer.rfind(b'--image-boundary')
+            first_boundary = buffer[:last_boundary].rfind(b'--image-boundary')
+            if first_boundary != -1 and last_boundary != -1 and first_boundary != last_boundary:
+                self.last_data["buffer"]=buffer[first_boundary:last_boundary]
+                buffer = buffer[last_boundary:]
+
 
 class AsyncCaptureURL(multiprocessing.Process):
     def __init__(self, cap_str, shrd_mem):

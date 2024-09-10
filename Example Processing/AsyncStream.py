@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 from mjpeg_streamer import Stream, MjpegServer
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -6,6 +7,26 @@ import time
 import asyncio
 import websockets
 import base64
+
+
+logger = logging.getLogger("MyApp")
+logger.setLevel(logging.DEBUG)
+
+# remove all default handlers
+for handler in logger.handlers:
+    logger.removeHandler(handler)
+
+# create console handler and set level to debug
+console_handle = logging.StreamHandler()
+console_handle.setLevel(logging.DEBUG)
+
+# create formatter
+formatter = logging.Formatter("%(name)-20s - %(levelname)-8s - %(message)s")
+console_handle.setFormatter(formatter)
+
+# now add new handler to logger
+logger.addHandler(console_handle)
+
 
 class AsyncMJPEGoverHTTP(multiprocessing.Process):
     def __init__(self,url,size, quality, data_share):
@@ -32,7 +53,7 @@ class AsyncMJPEGoverHTTP(multiprocessing.Process):
             server.stop()
 
 class AsyncMJPEGWEBPoverHTTP(multiprocessing.Process):
-    def __init__(self, url,size, quality, shared_dict, format="webp"):
+    def __init__(self, url,size, quality, shared_dict, lock, format="webp"):
         super().__init__()
         self.shared_dict = shared_dict
         self.shared_dict["Frame"]=(True, None)
@@ -40,6 +61,7 @@ class AsyncMJPEGWEBPoverHTTP(multiprocessing.Process):
         self.size = size
         self.quality = quality
         self.format = format
+        self.lock = lock
 
     def run(self):
         class MJPEGHandler(BaseHTTPRequestHandler):
@@ -47,6 +69,7 @@ class AsyncMJPEGWEBPoverHTTP(multiprocessing.Process):
                 self.size = server.size
                 self.quality = server.quality
                 self.format = server.format
+                self.lock = server.lock
                 super().__init__(request, client_address, server)
 
             def do_GET(self):
@@ -56,7 +79,9 @@ class AsyncMJPEGWEBPoverHTTP(multiprocessing.Process):
                     self.end_headers()
 
                     while True:
-                        sent, frame = self.server.shared_dict['Frame']
+
+                        with self.lock:
+                            sent, frame = self.server.shared_dict['Frame']
 
                         if not sent:
                             # Convert the frame to JPEG format
@@ -71,9 +96,9 @@ class AsyncMJPEGWEBPoverHTTP(multiprocessing.Process):
                                            f"X-Resolution: {self.size[0]}x{self.size[1]}\r\n\r\n"
                                            ).encode('utf-8') + frame_bytes + b"\r\n"
 
-
                             # Mark the frame as sent
-                            self.server.shared_dict['Frame'] = (True, None)
+                            with self.lock:
+                                self.server.shared_dict['Frame'] = (True, None)
 
                             # Send the MJPEG frame to the client
                             try:
@@ -90,11 +115,12 @@ class AsyncMJPEGWEBPoverHTTP(multiprocessing.Process):
         httpd.size = self.size
         httpd.quality = self.quality
         httpd.format = self.format
+        httpd.lock = self.lock
         print("Starting server on port 8080")
         httpd.serve_forever()
 
 class AsyncMJPEGWEBPoverWS(multiprocessing.Process):
-    def __init__(self, url, size, quality, shared_dict, format="webp"):
+    def __init__(self, url, size, quality, shared_dict, lock, format="webp"):
         super().__init__()
         self.shared_dict = shared_dict
         self.shared_dict["Frame"] = (True, None)
@@ -102,10 +128,12 @@ class AsyncMJPEGWEBPoverWS(multiprocessing.Process):
         self.size = size
         self.quality = quality
         self.format = format
+        self.lock = lock
 
     async def send_frame(self, websocket, path):
         while True:
-            sent, frame = self.shared_dict['Frame']
+            with self.lock:
+                sent, frame = self.shared_dict['Frame']
 
             if not sent:
                 # Convert the frame to WEBP format
