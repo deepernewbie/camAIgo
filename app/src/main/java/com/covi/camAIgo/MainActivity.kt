@@ -385,10 +385,12 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
                     var imageData = ByteArrayOutputStream()
                     var isReadingImage = false
                     var contentLength = -1
+                    val imageProcessingTimeout = 5000L // Timeout for image processing
+                    var imageStartTime = System.currentTimeMillis()
 
                     while (isActive) {
                         bytesRead = inputStream.read(buffer)
-                        if (bytesRead == -1) break
+                        if (bytesRead == -1) break // End of stream
 
                         var offset = 0
                         while (offset < bytesRead) {
@@ -401,26 +403,56 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
                                     val lengthMatch = "Content-Length: (\\d+)".toRegex().find(headers)
                                     contentLength = lengthMatch?.groupValues?.get(1)?.toIntOrNull() ?: -1
 
-                                    isReadingImage = true
-                                    offset = headerEnd + 4 // Skip the empty line after headers
-                                    imageData = ByteArrayOutputStream()
+                                    if (contentLength > 0) {
+                                        isReadingImage = true
+                                        offset = headerEnd + 4 // Skip the empty line after headers
+                                        imageData = ByteArrayOutputStream()
+                                        imageStartTime = System.currentTimeMillis() // Reset the image processing start time
+                                    } else {
+                                        // Invalid content length, skip and wait for new headers
+                                        offset = bytesRead // Exit inner loop and wait for more data
+                                        isReadingImage = false
+                                        contentLength = -1
+                                    }
                                 } else {
-                                    break // Wait for more data
+                                    // Partial header, break and wait for more data
+                                    break
                                 }
-                            }else {
+                            } else {
+                                // We're reading image data
                                 val remainingBytes = bytesRead - offset
                                 val bytesToRead = minOf(remainingBytes, contentLength - imageData.size())
+
+                                if (bytesToRead <= 0) {
+                                    // Invalid state (e.g., bytesToRead becomes negative), reset parser
+                                    isReadingImage = false
+                                    contentLength = -1
+                                    imageData.reset()
+                                    break // Exit and wait for next data packet
+                                }
+
                                 imageData.write(buffer, offset, bytesToRead)
                                 offset += bytesToRead
 
+                                // Check if the full image has been read
                                 if (imageData.size() == contentLength) {
-                                    // We have a complete image
                                     val bitmap = BitmapFactory.decodeByteArray(imageData.toByteArray(), 0, imageData.size())
                                     if (bitmap != null) {
                                         imageQueue.add(bitmap)
                                     }
+
+                                    // Reset image parsing state
                                     isReadingImage = false
                                     contentLength = -1
+                                }
+
+                                // Check if we've been processing this image for too long
+                                if (System.currentTimeMillis() - imageStartTime > imageProcessingTimeout) {
+                                    // Discard the partial image and reset the parser
+                                    isReadingImage = false
+                                    contentLength = -1
+                                    imageData.reset()
+                                    break
                                 }
                             }
                         }
