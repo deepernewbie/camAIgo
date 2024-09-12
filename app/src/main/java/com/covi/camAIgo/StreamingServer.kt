@@ -125,8 +125,8 @@ class StreamingServer(private val port: Int = 8080) {
                 "X-Resolution: ${frameWidth}x${frameHeight}\r\n\r\n"
         output.write(frameHeader.toByteArray())
         output.write(jpegBytes)
-        output.write("X-Timestamp_end: ${time_id}\r\n".toByteArray())
-        //output.write("\r\n".toByteArray())
+        //output.write("X-Timestamp_end: ${time_id}\r\n".toByteArray())
+        output.write("\r\n".toByteArray())
         output.flush()
     }
 

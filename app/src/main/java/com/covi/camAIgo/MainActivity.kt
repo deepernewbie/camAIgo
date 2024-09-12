@@ -118,8 +118,8 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     private lateinit var surfaceHolder: SurfaceHolder
     private var streamJob: Job? = null
     private var webSocketClient: WebSocketClient? = null
-    private val imageQueue = FixedSizeConcurrentQueue<Bitmap>(1)
-    private var drawJob: Job? = null
+    private val imageQueue = FixedSizeConcurrentQueue<ByteArray>(1)
+    private var displayJob: Job? = null
 
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -173,6 +173,8 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         brightness = Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS)
         Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
         Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 255)
+
+        showMainUI()
     }
 
     private fun initializeCamareSelectorSpinner() {
@@ -332,12 +334,12 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
             imageView.visibility = View.INVISIBLE
             surfaceView.visibility = View.VISIBLE
 
+            startDrawing()
+
             when {
                 streamUrl.startsWith("ws://") || streamUrl.startsWith("wss://") -> startWebSocketStream(streamUrl)
                 else -> startHttpStream(streamUrl)
             }
-
-            startDrawing()
 
         } else {
             Toast.makeText(this, "Please enter a valid stream URL", Toast.LENGTH_SHORT).show()
@@ -345,22 +347,25 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     }
 
     private fun startDrawing() {
-        drawJob = CoroutineScope(Dispatchers.Default).launch {
+        displayJob = CoroutineScope(Dispatchers.Default).launch {
             while (isActive) {
-                val bitmap = imageQueue.poll()
-                if (bitmap != null) {
-                    withContext(Dispatchers.Main) {
-                        drawBitmapOnSurface(bitmap)
+                val imageBytes = imageQueue.poll()
+                if (imageBytes != null) {
+                    val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                    if (bitmap != null) {
+                        withContext(Dispatchers.Main) {
+                            drawBitmapOnSurface(bitmap)
+                        }
                     }
                 }
-                delay(1)  // Adjust the delay to control the frame rate (e.g., 16ms for ~60 FPS)
+                delay(1) // Small delay to prevent excessive CPU usage
             }
         }
     }
 
     private fun stopDrawing() {
-        drawJob?.cancel()
-        drawJob = null
+        displayJob?.cancel()
+        displayJob = null
     }
 
     private fun drawBitmapOnSurface(bitmap: Bitmap) {
@@ -385,74 +390,51 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
                     var imageData = ByteArrayOutputStream()
                     var isReadingImage = false
                     var contentLength = -1
-                    val imageProcessingTimeout = 5000L // Timeout for image processing
-                    var imageStartTime = System.currentTimeMillis()
 
                     while (isActive) {
                         bytesRead = inputStream.read(buffer)
-                        if (bytesRead == -1) break // End of stream
+                        if (bytesRead == -1) break
 
                         var offset = 0
                         while (offset < bytesRead) {
                             if (!isReadingImage) {
-                                // Look for the start of an image
                                 val headerEnd = findSequence(buffer, "\r\n\r\n".toByteArray(), offset, bytesRead)
                                 if (headerEnd != -1) {
-                                    // Parse headers
                                     val headers = String(buffer, offset, headerEnd - offset)
                                     val lengthMatch = "Content-Length: (\\d+)".toRegex().find(headers)
                                     contentLength = lengthMatch?.groupValues?.get(1)?.toIntOrNull() ?: -1
 
                                     if (contentLength > 0) {
                                         isReadingImage = true
-                                        offset = headerEnd + 4 // Skip the empty line after headers
+                                        offset = headerEnd + 4
                                         imageData = ByteArrayOutputStream()
-                                        imageStartTime = System.currentTimeMillis() // Reset the image processing start time
                                     } else {
-                                        // Invalid content length, skip and wait for new headers
-                                        offset = bytesRead // Exit inner loop and wait for more data
+                                        offset = bytesRead
                                         isReadingImage = false
                                         contentLength = -1
                                     }
                                 } else {
-                                    // Partial header, break and wait for more data
                                     break
                                 }
                             } else {
-                                // We're reading image data
                                 val remainingBytes = bytesRead - offset
                                 val bytesToRead = minOf(remainingBytes, contentLength - imageData.size())
 
                                 if (bytesToRead <= 0) {
-                                    // Invalid state (e.g., bytesToRead becomes negative), reset parser
                                     isReadingImage = false
                                     contentLength = -1
                                     imageData.reset()
-                                    break // Exit and wait for next data packet
+                                    break
                                 }
 
                                 imageData.write(buffer, offset, bytesToRead)
                                 offset += bytesToRead
 
-                                // Check if the full image has been read
                                 if (imageData.size() == contentLength) {
-                                    val bitmap = BitmapFactory.decodeByteArray(imageData.toByteArray(), 0, imageData.size())
-                                    if (bitmap != null) {
-                                        imageQueue.add(bitmap)
-                                    }
+                                    imageQueue.add(imageData.toByteArray())
 
-                                    // Reset image parsing state
                                     isReadingImage = false
                                     contentLength = -1
-                                }
-
-                                // Check if we've been processing this image for too long
-                                if (System.currentTimeMillis() - imageStartTime > imageProcessingTimeout) {
-                                    // Discard the partial image and reset the parser
-                                    isReadingImage = false
-                                    contentLength = -1
-                                    imageData.reset()
-                                    break
                                 }
                             }
                         }
@@ -461,8 +443,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
                 }
                 connection.disconnect()
             } catch (e: Exception) {
-                e.printStackTrace()
-                delay(1000) // Retry after delay on failure
+                Log.e("Streaming", "Error in streaming: ${e.message}")
             }
         }
     }
@@ -494,12 +475,9 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
                     if (it.startsWith("UklGR")) {  // This is the base64 prefix for WebP images
                         try {
                             val imageBytes = Base64.decode(it, Base64.DEFAULT)
-                            val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                            if (bitmap != null) {
-                                imageQueue.add(bitmap)
-                            } else {
-                                Log.e("WebSocket", "Failed to decode WebP image")
-                            }
+
+                            imageQueue.add(imageBytes)
+
                         } catch (e: Exception) {
                             Log.e("WebSocket", "Error decoding image: ${e.message}")
                         }
@@ -514,12 +492,8 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
                 bytes?.let {
                     val imageBytes = ByteArray(it.remaining())
                     it.get(imageBytes)
-                    val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                    if (bitmap != null) {
-                        imageQueue.add(bitmap)
-                    } else {
-                        Log.e("WebSocket", "Failed to decode binary message as bitmap")
-                    }
+
+                    imageQueue.add(imageBytes)
                 }
             }
 
@@ -552,8 +526,6 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         webSocketClient?.close()
         webSocketClient = null
     }
-
-
 
     private fun createCameraPreviewSession() {
         val previewRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
