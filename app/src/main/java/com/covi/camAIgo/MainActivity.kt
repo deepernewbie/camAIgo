@@ -5,6 +5,7 @@ import StreamingServer
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -42,6 +43,8 @@ import android.widget.TextView
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
+import android.hardware.display.DisplayManager
+import android.os.PowerManager
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import kotlinx.coroutines.*
@@ -121,6 +124,9 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     private val imageQueue = FixedSizeConcurrentQueue<ByteArray>(1)
     private var displayJob: Job? = null
 
+    private var powerSavingModeChanged = false
+    private var batteryOptimizationExempted = false
+
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -143,6 +149,10 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         initializeCamareSelectorSpinner()
 
         selectedCameraId?.let { initializeResolutionSpinner(it) }
+
+
+
+
 
 
         updateUriDisplay(true)
@@ -173,6 +183,19 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         brightness = Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS)
         Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
         Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 255)
+
+        if (isPowerSavingModeOn()) {
+            requestDisablePowerSavingMode()
+            powerSavingModeChanged = true
+        }
+
+        if (requestBatteryOptimizationExemption()) {
+            batteryOptimizationExempted = true
+        }
+
+
+
+
 
         showMainUI()
     }
@@ -647,6 +670,18 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         }
     }
 
+    private fun isPowerSavingModeOn(): Boolean {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return powerManager.isPowerSaveMode
+    }
+
+    private fun requestDisablePowerSavingMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            val intent = Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
+            startActivity(intent)
+        }
+    }
+
 
     override fun onPause() {
         super.onPause()
@@ -659,6 +694,9 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         stopStreaming()
         stopCamera()  // Ensure camera is fully stopped
         Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, brightness)
+        if (powerSavingModeChanged || batteryOptimizationExempted) {
+            promptUserToRevertChanges()
+        }
     }
 
     override fun onBackPressed() {
@@ -702,5 +740,38 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
             activity.startActivityForResult(intent, 0)
         }
 
+    }
+
+    private fun requestBatteryOptimizationExemption(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent()
+            val packageName = packageName
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                intent.action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                intent.data = Uri.parse("package:$packageName")
+                startActivity(intent)
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun promptUserToRevertChanges() {
+        AlertDialog.Builder(this)
+            .setTitle("Revert Power Settings")
+            .setMessage("Would you like to revert the power saving settings?")
+            .setPositiveButton("Yes") { _, _ ->
+                if (powerSavingModeChanged) {
+                    val intent = Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
+                    startActivity(intent)
+                }
+                if (batteryOptimizationExempted) {
+                    val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    startActivity(intent)
+                }
+            }
+            .setNegativeButton("No", null)
+            .show()
     }
 }
