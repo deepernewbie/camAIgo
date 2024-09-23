@@ -1,6 +1,7 @@
 from AsyncCapture import *
 from AsyncStream import *
 import multiprocessing
+from OnnxInferer import DepthEstimator
 
 
 laptop_ip = "192.168.12.1"
@@ -10,6 +11,11 @@ Wout = 640
 
 
 def main():
+
+
+    depth_estimate = DepthEstimator("./onnx/depth_model.onnx")
+
+
     shared_mem = multiprocessing.Manager().dict()
     shared_mem["Stop"] = False
 
@@ -43,9 +49,8 @@ def main():
                 continue
 
             # Your Favorite Algorithm
-            frame_alg_out=frame_alg_in #here some magic happens
+            frame_alg_out=depth_estimate(frame_alg_in) #here some magic happens
             data_share["Frame"] = (False, frame_alg_out)
-
             cv2.imshow("Output", frame_alg_out)
 
             if cv2.waitKey(1) == ord("q"):
